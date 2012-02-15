@@ -3,8 +3,8 @@ require 'php-sdk/src/facebook.php';
 
 // インスタンス生成
 $facebook = new Facebook(array(
-   'appId'  => '139869786134181',
-   'secret' => '00032eaeb46e598f9c69aa07400e9458',
+   'appId'  => '381724648509961',
+   'secret' => 'c4dd799068ac8029bd5d9b46ba44adad',
 //  'appId'  => '185962178177200', // for YC
 //  'secret' => '7d297d8f025ab9497ffb7a8267f7d16c' // YC
 ));
@@ -37,11 +37,13 @@ if ($user) {
   exit;
 }
 
-    // メッセージが投稿されたときは Facebook に送信
-    if(isset($_POST['message'])) {
+// メッセージが投稿されたときは Facebook に送信
+
+    if(isset($_POST['submit2'])) {
         $facebook->api('/me/feed', 'POST', array(
-            'message' => $_POST['message'],
+            'message' => $_POST['wallmessage'],
         ));
+        header("Location: main.php");
     }
 ?>
 <!doctype html>
@@ -88,7 +90,12 @@ if ($user) {
     <input type = "hidden" name="questionAnswerID" value="01">
     <input type = "text" name = "comment" maxlength = "80" />
     <input type = "submit" name = "submit1" value = "投票" />
-
+    <input type = "hidden" name="wallmessage" value="きゃりーぱみゅぱみゅに投票しました">
+    <?php
+        $facebook->api('/me/feed', 'POST', array(
+            'message' => $_POST['wallmessage'],
+        ));
+    ?>
     </form>
     </div>
 
@@ -101,9 +108,15 @@ if ($user) {
     <input type = "hidden" name="questionAnswerID" value="02">
     <input type = "text" name = "comment" maxlength = "80" />
     <input type = "submit" name = "submit2" value = "投票" />
+    <input type = "hidden" name="wallmessage" value="温水洋一に投票しました">
+    <?php
+        $facebook->api('/me/feed', 'POST', array(
+            'message' => $_POST['wallmessage'],
+        ));
+    ?>
 
-    </div>
     </form>
+    </div>
     <br>
     <br>
     <form method="POST" action="main.php" >
@@ -141,13 +154,13 @@ if ($user) {
   <p><?php echo $user_profile['name'] ?> さんの今日の気分は？</p>
   <form action="" method="post">
     <ul>
-      <li><input type="submit" name="message" value="飲みに行こう！" /></li>
-      <li><input type="submit" name="message" value="探さないでください" /></li>
-      <li><input type="submit" name="message" value="ぎゃふん" /></li>
+      <li><input type="submit" name="message1" value="飲みに行こう！" /></li>
+      <li><input type="submit" name="message1" value="探さないでください" /></li>
+      <li><input type="submit" name="message1" value="ぎゃふん" /></li>
     </ul>
   </form>
-<?php else: ?>
-  <p>アプリを使用するには<a target="_top" href="<?php echo $loginUrl ?>">ログイン</a>してください</p>
+//<?php else: ?>
+//  <p>アプリを使用するには<a target="_top" href="<?php echo $loginUrl ?>">ログイン</a>してください</p>
 <?php endif ?>
 
 
