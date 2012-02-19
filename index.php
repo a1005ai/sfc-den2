@@ -1,85 +1,105 @@
 <?php
-require 'php-sdk/src/facebook.php';
+  require 'php-sdk/src/facebook.php';
 
-// インスタンス生成
-$facebook = new Facebook(array(
-   'appId'  => '139869786134181',
-   'secret' => '00032eaeb46e598f9c69aa07400e9458',
+  // インスタンス生成
+  $facebook = new Facebook(array(
+    'appId'  => '139869786134181',
+    'secret' => '00032eaeb46e598f9c69aa07400e9458',
 //  'appId'  => '185962178177200', // for YC
 //  'secret' => '7d297d8f025ab9497ffb7a8267f7d16c' // YC
-));
-
-// ユーザＩＤ取得
-$user = $facebook->getUser();
-
-// $user_id = $facebook->require_login("publish_stream");
-
-if ($user) {
-  try {
-    // Proceed knowing you have a logged in user who's authenticated.
-    $user_profile = $facebook->api('/me');
-  } catch (FacebookApiException $e) {
-    error_log($e);
-    $user = null;
-  }
-}
-
-if ($user) {
-  $logoutUrl = $facebook->getLogoutUrl();
-} else {
-  $loginUrl = $facebook->getLoginUrl(array(
-    'scope' => 'publish_stream,user_birthday',
-    'redirect_uri' => 'https://apps.facebook.com/sakauratestai/'
   ));
-  header("Location: {$loginUrl}");
-  exit;
-}
+
+  // ユーザＩＤ取得
+  $user = $facebook->getUser();
+
+  //$user_id = $facebook->require_login("publish_stream");
+
+  if ($user) {
+    try {
+      // Proceed knowing you have a logged in user who's authenticated.
+      $user_profile = $facebook->api('/me');
+      $user_likes = $facebook->api('/me/likes');
+      $user_friends =$facebook ->api('/me/friends');
+      $feed=$facebook ->api('/me/feed');
+
+    } catch (FacebookApiException $e) {
+      error_log($e);
+      $user = null;
+    }
+  }
+
+  if ($user) {
+    $logoutUrl = $facebook->getLogoutUrl();
+  } else {
+    $loginUrl = $facebook->getLoginUrl(array(
+
+   //permission
+    'scope' => 'publish_stream,user_birthday,user_hometown,user_relationships, user_likes,friends_likes, read_friendlists, user_groups',
+    'redirect_uri' => 'https://apps.facebook.com/sakauratestai/'
+    ));
+
+    header("Location: {$loginUrl}");
+
+    exit;
+
+  }
+
+//イイネ数、友達数のカウント
+//$count_likes =count($user_likes['data']);
+//$count_friends =count($user_friends['data']);
+
+//Pointアルゴリズム
+//$point=$count_likes/($count_friends + 1)*100;
+
 
 // メッセージが投稿されたときは Facebook に送信
 
-    if(isset($_POST['submit1'] ) || isset( $_POST['submit2'])) {
-        $facebook->api('/me/feed', 'POST', array(
-            'message' => $_POST['wallmessage'],
-        ));
+  if(isset($_POST['submit1'] ) || isset( $_POST['submit2'])) {
+    $facebook->api('/me/feed', 'POST', array('message' => $_POST['wallmessage'],));
        
-       //DBへの接続の準備
-$questionID = $_POST["questionID"];
-$questionAnswerID = $_POST["questionAnswerID"];
-$comment =$_POST["comment"];
+    //DBへの接続の準備
+    $questionID = $_POST["questionID"];
+    $questionAnswerID = $_POST["questionAnswerID"];
+    $comment =$_POST["comment"];
 
-$dsn = 'mysql:dbname=den2_db;host=mysql408.db.sakura.ne.jp';
-$dbuser = 'den2';
-$passwd = 'den2den2den2';
+    $dsn = 'mysql:dbname=den2_db;host=mysql408.db.sakura.ne.jp';
+    $dbuser = 'den2';
+    $passwd = 'den2den2den2';
 
-try {
-   $pdo = new PDO($dsn, $dbuser, $passwd);
+    try {
+      $pdo = new PDO($dsn, $dbuser, $passwd);
 
-//投票数の更新
-   $sql = 'UPDATE questionAnswer SET QuestionAnswerCount = QuestionAnswerCount + 1,QuestionAnswerPoint = QuestionAnswerPoint + 1 WHERE QuestionID = ? and QuestionAnswerID = ? ';   
-   $stmt = $pdo->prepare($sql);
-   $stmt->execute(array($questionID,$questionAnswerID));
+      //投票数の更新
+      //$sql = 'UPDATE questionAnswer SET QuestionAnswerCount = QuestionAnswerCount + 1,QuestionAnswerPoint = QuestionAnswerPoint + ? WHERE QuestionID = ? and  QuestionAnswerID = ? ';   
+      //$stmt = $pdo->prepare($sql);
+      //$stmt->execute(array($point,$questionID,$questionAnswerID));
+      $sql = 'UPDATE questionAnswer SET QuestionAnswerCount = QuestionAnswerCount + 1,QuestionAnswerPoint = QuestionAnswerPoint + ?/(? + 1)*100 WHERE QuestionID = ? and QuestionAnswerID = ? ';   
+      $stmt = $pdo->prepare($sql);
+      $stmt->execute(array($count_likes,$count_friends,$questionID,$questionAnswerID));
 
-   //コメントの保有
-   //Commentは８０字以内のコメントを保有
-   $stmt = $pdo->query("SET NAMES utf8;");
-   $stmt = $pdo->query($sql);
-   $sql = 'INSERT INTO QuestionAnswerComment (QuestionID,QuestionAnswerID,Comment,FBUserID) VALUES (?,?,?,?)';
-   $stmt = $pdo->prepare($sql);
-   $stmt->execute(array($questionID,$questionAnswerID,$comment,$user));
+      //コメントの保有
+      //Commentは８０字以内のコメントを保有
+      $stmt = $pdo->query("SET NAMES utf8;");
+      $stmt = $pdo->query($sql);
+      $sql = 'INSERT INTO QuestionAnswerComment (QuestionID,QuestionAnswerID,Comment,FBUserID) VALUES (?,?,?,?)';
+      $stmt = $pdo->prepare($sql);
+      $stmt->execute(array($questionID,$questionAnswerID,$comment,$user));
 
-    //ユーザーID,ユーザ名保有
-   $sql = 'INSERT INTO facebookUser(FacebookUserID,FacebookUserName) VALUES (?,?)';
-   $stmt = $pdo->prepare($sql);
-   $stmt->execute(array($user,$user_profile['name']));
 
-} catch( PDOException $e ) {
-// DBアクセスができなかったとき
-  echo 'Connection failed(1): ' . $e->getMessage();
-  $pdo = null;
-  die();
-}
-        header("Location: main.php");
+      //ユーザーID,ユーザ名保有
+      //$sql = 'INSERT INTO facebookUser(FacebookUserID,FacebookUserName,Gender,CountLikes,CountFriends,Hometown,Relationship) VALUES (?,?,?,?,?,?,?)';
+      //$stmt = $pdo->prepare($sql);
+      //$stmt->execute(array($user,$user_profile['name'],$user_profile['gender'],$count_likes,$count_friends,$user_profile['hometown'['name'],$user_profile['relationship_status']));
+
+    } catch( PDOException $e ) {
+      //DBアクセスができなかったとき
+      echo 'Connection failed(1): ' . $e->getMessage();
+      $pdo = null;
+      die();
     }
+
+    header("Location: main.php");
+  }
 ?>
 
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
@@ -87,140 +107,137 @@ try {
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja" lang="ja">
 
 <head>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<html xmlns:fb="http://www.facebook.com/2008/fbml">
-<link rel = "stylesheet" href = "vote.css" type = "text/css">
-<title>vote page</title>
-
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <html xmlns:fb="http://www.facebook.com/2008/fbml">
+  <link rel = "stylesheet" href = "vote.css" type = "text/css">
+  <title>vote page</title>
 </head>
 
 <body>
 
-<script type="text/javascript" src="http://connect.facebook.net/en_US/all.js"></script>
-<div id="fb-root"></div>
+  <script type="text/javascript" src="http://connect.facebook.net/en_US/all.js"></script>
+  <div id="fb-root"></div>
 
-<?php
-
-$name_p1 = "きゃりーぱみゅぱみゅ";
-$name_p2 = "温水洋一";
-$img_p1 = "/images/pmpm.jpg";
-$img_p2 = "/images/nknk.jpg";
-
-?>
+  <?php
+    $name_p1 = "きゃりーぱみゅぱみゅ";
+    $name_p2 = "温水洋一";
+    $img_p1 = "/images/pmpm.jpg";
+    $img_p2 = "/images/nknk.jpg";
+  ?>
 
 
-<!-- ヘッダー -->
-<div id = "header">
-<img src = "images/Vfor_03.gif" alt = "ロゴ" width = "300" height = "100" />
-<h3>嫌いな方に投票してください</h3>
-</div>
+  <!-- ヘッダー -->
+  <div id = "header">
+  <img src = "images/Vfor_03.gif" alt = "ロゴ" width = "300" height = "100" />
+  <h3>嫌いな方に投票してください</h3>
+  </div>
 
-<!-- コンテンツ -->
+  <!-- コンテンツ -->
 
-<div id = "content">
-<form action = "" method = "POST">
-<div id = "questionAnswerID01">
-<?php print "<img src = {$img_p1}><br/>\n"; ?>
-<?php print "$name_p1<br/>\n"; ?>
-<input type = "hidden" name="questionID" value="01">
-<input type = "hidden" name="questionAnswerID" value="01">
-<input type = "text" name = "comment" maxlength = "80" />
-<input type = "submit" name = "submit1" value = "投票" />
- <input type = "hidden" name="wallmessage" value="<?php print $user_profile['name']; ?>さんがきゃりーぱみゅぱみゅに投票しました">
-</form>
-</br></br>
-</div>
+  <div id = "content">
+  <form action = "" method = "POST">
+  <div id = "questionAnswerID01">
+  <?php print "<img src = {$img_p1}><br/>\n"; ?>
+  <?php print "$name_p1<br/>\n"; ?>
+  <input type = "hidden" name="questionID" value="01">
+  <input type = "hidden" name="questionAnswerID" value="01">
+  <input type = "text" name = "comment" maxlength = "80" />
+  <input type = "submit" name = "submit1" value = "投票" />
+  <input type = "hidden" name="wallmessage" value="<?php print $user_profile['name']; ?>さんがVforで<?php print "$name_p2"; ?>に投票して　pointが加算されました！<?php   print "\n"; ?>https://apps.facebook.com/vfortest/">
+  </form>
+  </br></br>
+  </div>
 
-<form action = "" method = "POST">
-<div id = "questionAnswerID02">
-<?php print "<img src = {$img_p2}><br/>\n"; ?>
-<?php print "$name_p2<br/>\n"; ?>
-<input type = "hidden" name="questionID" value="01">
-<input type = "hidden" name="questionAnswerID" value="02">
-<input type = "text" name = "comment" maxlength = "80" />
-<input type = "submit" name = "submit2" value = "投票" />
-<input type = "hidden" name="wallmessage" value="<?php print $user_profile['name']; ?>さんが温水に投票しました">
-</form>
-</br></br>
-</div>
-</div>
+  <form action = "" method = "POST">
+    <div id = "questionAnswerID02">
+    <?php print "<img src = {$img_p2}><br/>\n"; ?>
+    <?php print "$name_p2<br/>\n"; ?>
+    <input type = "hidden" name="questionID" value="01">
+    <input type = "hidden" name="questionAnswerID" value="02">
+    <input type = "text" name = "comment" maxlength = "80" />
+    <input type = "submit" name = "submit2" value = "投票" />
+    <input type = "hidden" name="wallmessage" value="<?php print $user_profile['name']; ?>さんがVforで<?php print "$name_p1"; ?>に投票して　pointが加算されました！<?php print "\n"; ?>https://apps.facebook.com/vfortest/">
+  </form>
+  </br></br>
+  </div>
+  </div>
 
-<div id = "comment">
-<div id = "table-left">
-<table border="1">
-<tr>
+  <div id = "comment">
+  <div id = "table-left">
+  <table border="1">
+  <tr>
     <th>コメント</th>
-　<th>Num.</th>
-</tr>
+　  <th>Num.</th>
+  </tr>
 
-<?php
+  <?php
 
-$dsn = 'mysql:dbname=den2_db;host=mysql408.db.sakura.ne.jp';
-$dbuser = 'den2';
-$passwd = 'den2den2den2';
+    $dsn = 'mysql:dbname=den2_db;host=mysql408.db.sakura.ne.jp';
+    $dbuser = 'den2';
+    $passwd = 'den2den2den2';
 
-try{
-$pdo = new PDO($dsn, $dbuser, $passwd);
-$sql = 'SELECT QuestionAnswerCommentID , Comment  FROM  QuestionAnswerComment WHERE  QuestionID = 01 and QuestionAnswerID = 01 and LENGTH(Comment)  > 0 ORDER BY  QuestionAnswerCommentID  DESC LIMIT 0,5 ';
-//文字コードをutf8に指定
-$stmt = $pdo->query("SET NAMES utf8;");
- $stmt = $pdo->query($sql);
-} catch( PDOException $e ) {
-// DBアクセスができなかったとき
- echo 'Connection failed(2): ' . $e->getMessage();
- $pdo = null;
- die();
-}
- while($result = $stmt->fetch(PDO::FETCH_ASSOC)){
- print('<td>'.$result['Comment'].'</td>');
- print('<td>'.$result['QuestionAnswerCommentID'].'</td>');
- print('</tr>');
- }
-?>
-</table>
-</div>
+    try{
+      $pdo = new PDO($dsn, $dbuser, $passwd);
+      $sql = 'SELECT QuestionAnswerCommentID , Comment  FROM  QuestionAnswerComment WHERE  QuestionID = 01 and QuestionAnswerID = 01 and LENGTH(Comment)  > 0 ORDER BY  QuestionAnswerCommentID  DESC LIMIT 0,5 ';
+      //文字コードをutf8に指定
+      $stmt = $pdo->query("SET NAMES utf8;");
+      $stmt = $pdo->query($sql);
+    } catch( PDOException $e ) {
+      // DBアクセスができなかったとき
+      echo 'Connection failed(2): ' . $e->getMessage();
+      $pdo = null;
+      die();
+    }
+    while($result = $stmt->fetch(PDO::FETCH_ASSOC)){
+      print('<td>'.$result['Comment'].'</td>');
+      print('<td>'.$result['QuestionAnswerCommentID'].'</td>');
+      print('</tr>');
+    }
+  ?>
+  </table>
+  </div>
 
-<div id = "table-right">
-<table border="1">
-<tr>
+  <div id = "table-right">
+  <table border="1">
+  <tr>
     <th>コメント</th>
-　<th>Num.</th>
-</tr>
+　  <th>Num.</th>
+  </tr>
 
-<?php
+  <?php
 
-//$dsn = 'mysql:dbname=den2_db;host=mysql408.db.sakura.ne.jp';
-//$dbuser = 'den2';
-//$passwd = 'den2den2den2';
+    //$dsn = 'mysql:dbname=den2_db;host=mysql408.db.sakura.ne.jp';
+    //$dbuser = 'den2';
+    //$passwd = 'den2den2den2';
 
-try{
-//$pdo = new PDO($dsn, $dbuser, $passwd);
-$sql = 'SELECT QuestionAnswerCommentID , Comment  FROM  QuestionAnswerComment WHERE  QuestionID = 01 and QuestionAnswerID = 02 and LENGTH(Comment)  > 0 ORDER BY  QuestionAnswerCommentID  DESC LIMIT 0,5 ';
-//文字コードをutf8に指定
-$stmt = $pdo->query("SET NAMES utf8;");
-$stmt = $pdo->query($sql);
-} catch( PDOException $e ) {
-// DBアクセスができなかったとき
- echo 'Connection failed(3): ' . $e->getMessage();
- $pdo = null;
- die();
-}
- while($result = $stmt->fetch(PDO::FETCH_ASSOC)){
- print('<td>'.$result['Comment'].'</td>');
- print('<td>'.$result['QuestionAnswerCommentID'].'</td>');
- print('</tr>');
- }
-?>
-</table>
-</div>
-</div>
+    try{
+      //$pdo = new PDO($dsn, $dbuser, $passwd);
+      $sql = 'SELECT QuestionAnswerCommentID , Comment  FROM  QuestionAnswerComment WHERE  QuestionID = 01 and QuestionAnswerID = 02 and LENGTH(Comment)  > 0 ORDER BY  QuestionAnswerCommentID  DESC LIMIT 0,5 ';
+      //文字コードをutf8に指定
+      $stmt = $pdo->query("SET NAMES utf8;");
+      $stmt = $pdo->query($sql);
+    } catch( PDOException $e ) {
+      // DBアクセスができなかったとき
+      echo 'Connection failed(3): ' . $e->getMessage();
+      $pdo = null;
+      die();
+    }
+    while($result = $stmt->fetch(PDO::FETCH_ASSOC)){
+      print('<td>'.$result['Comment'].'</td>');
+      print('<td>'.$result['QuestionAnswerCommentID'].'</td>');
+      print('</tr>');
+    }
+  ?>
+  </table>
+  </div>
+  </div>
 
 
-<div id = "check">
-<form method="POST" action="main.php" >
-  <input type="submit" id="result" name="result" value="投票せずに結果を見る">
-</form>
-</div>
+  <div id = "check">
+  <form method="POST" action="main.php" >
+    <input type="submit" id="result" name="result" value="投票せずに結果を見る">
+  </form>
+  </div>
 
     <h1>php-sdk</h1>
 
@@ -236,18 +253,42 @@ $stmt = $pdo->query($sql);
     <?php endif ?>
 
     <h3>PHP Session</h3>
-    <pre><?php print_r($_SESSION); ?></pre>
+    <pre style="overflow: auto; white-space: normal;"><?php print_r($_SESSION); ?></pre>
+
 
     <?php if ($user): ?>
       <h3>You</h3>
       <img src="https://graph.facebook.com/<?php echo $user; ?>/picture">
 
       <h3>Your User Object (/me)</h3>
-      <pre><?php print_r($user_profile); ?></pre>
+
+
+     //格納情報確認
+      <pre>
+        <?php  
+          print_r($user_profile);
+         //print_r($user_likes['data']);
+         //print_r($user_friends);
+         //print_r($count_likes);
+         //print_r($count_friends);     
+        ?>
+      </pre>
     <?php else: ?>
       <strong><em>You are not Connected.</em></strong>
     <?php endif ?>
 
+	<script type="text/javascript" src="http://connect.facebook.net/en_US/all.js"></script>
+	<div id="fb-root"></div>
+	<script type="text/javascript">
+		FB.init({ 
+		appId : '<span style="color:#990033">232915943468966</span>',
+		status : true, // check login status
+		cookie : true, // enable cookies
+		xfbml : true, // parse XFBML
+		logging : true
+		});
+		FB.Canvas.setAutoResize();
+	</script>
 
   </body>
 </html>
